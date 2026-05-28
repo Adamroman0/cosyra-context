@@ -3,28 +3,15 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/adamroman0/cosyra-context/internal/cli"
 )
 
 var version = "dev"
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(2)
-	}
-
-	switch os.Args[1] {
-	case "version":
-		fmt.Println(version)
-	case "on", "off", "status", "hook":
-		fmt.Fprintf(os.Stderr, "cosyra %s is not implemented yet\n", os.Args[1])
+	if err := cli.Run(os.Args[1:], version, os.Stdin, os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	default:
-		printUsage()
-		os.Exit(2)
 	}
-}
-
-func printUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: cosyra <on|off|status|hook|version>\n")
 }

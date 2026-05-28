@@ -1,6 +1,6 @@
 .cosyra/
+.gocache/
 dist/
 coverage/
 node_modules/
 *.log
-
