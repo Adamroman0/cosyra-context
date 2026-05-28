@@ -1,6 +1,7 @@
 package cosyra
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/adamroman0/cosyra-context/internal/store"
 )
 
 const (
@@ -44,7 +47,8 @@ func ResolveProjectRoot(project string) (string, error) {
 }
 
 func EnableProject(projectRoot string, tools []string) (*Config, error) {
-	if err := os.MkdirAll(filepath.Join(projectRoot, DirName), 0o700); err != nil {
+	cosyraDir := filepath.Join(projectRoot, DirName)
+	if err := os.MkdirAll(cosyraDir, 0o700); err != nil {
 		return nil, err
 	}
 	if err := ensureGitignore(projectRoot); err != nil {
@@ -65,6 +69,24 @@ func EnableProject(projectRoot string, tools []string) (*Config, error) {
 	}
 	if err := writeJSONAtomic(configPath(projectRoot), cfg, 0o600); err != nil {
 		return nil, err
+	}
+	db, err := store.Open(context.Background(), cosyraDir)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	if err := db.UpsertProject(context.Background(), store.Project{
+		Root:      projectRoot,
+		Enabled:   true,
+		CreatedAt: cfg.CreatedAt,
+		UpdatedAt: cfg.UpdatedAt,
+	}); err != nil {
+		return nil, err
+	}
+	for _, tool := range cfg.EnabledTools {
+		if err := db.SetAdapter(context.Background(), projectRoot, tool, true, cfg.UpdatedAt); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := os.Stat(filepath.Join(projectRoot, DirName, ContextFile)); errors.Is(err, os.ErrNotExist) {
 		if err := os.WriteFile(filepath.Join(projectRoot, DirName, ContextFile), []byte("# Cosyra Context\n\nNo context captured yet.\n"), 0o600); err != nil {
@@ -87,7 +109,20 @@ func DisableProject(projectRoot string, purge bool) error {
 	}
 	cfg.Enabled = false
 	cfg.UpdatedAt = time.Now().UTC()
-	return writeJSONAtomic(configPath(projectRoot), cfg, 0o600)
+	if err := writeJSONAtomic(configPath(projectRoot), cfg, 0o600); err != nil {
+		return err
+	}
+	db, err := store.Open(context.Background(), filepath.Join(projectRoot, DirName))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return db.UpsertProject(context.Background(), store.Project{
+		Root:      projectRoot,
+		Enabled:   false,
+		CreatedAt: cfg.CreatedAt,
+		UpdatedAt: cfg.UpdatedAt,
+	})
 }
 
 func LoadConfig(projectRoot string) (*Config, error) {
