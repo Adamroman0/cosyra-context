@@ -49,6 +49,15 @@ type Turn struct {
 	UpdatedAt      time.Time
 }
 
+type Checkpoint struct {
+	ProjectRoot        string
+	Context            string
+	ContextBytes       int
+	LastAgent          string
+	LastAgentSessionID string
+	UpdatedAt          time.Time
+}
+
 func Open(ctx context.Context, cosyraDir string) (*Store, error) {
 	if err := os.MkdirAll(cosyraDir, 0o700); err != nil {
 		return nil, err
@@ -249,6 +258,23 @@ func (s *Store) UpsertTurn(ctx context.Context, turn Turn) error {
 		startedAt, completedAt, turn.Summary, metadata,
 		turn.CreatedAt.UTC().Format(time.RFC3339Nano),
 		turn.UpdatedAt.UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func (s *Store) UpsertCheckpoint(ctx context.Context, checkpoint Checkpoint) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO checkpoints (
+			project_root, context, context_bytes, last_agent, last_agent_session_id, updated_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(project_root) DO UPDATE SET
+			context = excluded.context,
+			context_bytes = excluded.context_bytes,
+			last_agent = excluded.last_agent,
+			last_agent_session_id = excluded.last_agent_session_id,
+			updated_at = excluded.updated_at
+	`, checkpoint.ProjectRoot, checkpoint.Context, checkpoint.ContextBytes, checkpoint.LastAgent,
+		checkpoint.LastAgentSessionID, checkpoint.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	return err
 }
 

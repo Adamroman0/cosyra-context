@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adamroman0/cosyra-context/internal/checkpoint"
 	"github.com/adamroman0/cosyra-context/internal/cosyra"
+	"github.com/adamroman0/cosyra-context/internal/privacy"
 	"github.com/adamroman0/cosyra-context/internal/store"
 )
 
@@ -81,7 +83,7 @@ func HandleStop(projectRoot string, agent string, input io.Reader) (*StopResult,
 	agentSessionID := firstNonEmpty(extractString(payload, "session_id"), extractString(payload, "sessionId"), os.Getenv("COSYRA_AGENT_SESSION_ID"), "unknown")
 	cosyraSessionID := firstNonEmpty(os.Getenv("COSYRA_SESSION_ID"), randomID("cosyra"))
 	turnKey := firstNonEmpty(extractString(payload, "turn_id"), extractString(payload, "turnId"), extractString(payload, "uuid"), hashPayload(raw))
-	summary := extractSummary(payload)
+	summary := privacy.Sanitize(extractSummary(payload))
 
 	db, err := store.Open(context.Background(), filepath.Join(projectRoot, cosyra.DirName))
 	if err != nil {
@@ -111,6 +113,16 @@ func HandleStop(projectRoot string, agent string, input io.Reader) (*StopResult,
 		Summary:        summary,
 		MetadataJSON:   "{}",
 		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
+		return nil, err
+	}
+	if err := checkpoint.Update(context.Background(), db, checkpoint.UpdateInput{
+		ProjectRoot:    projectRoot,
+		Agent:          agent,
+		AgentSessionID: agentSessionID,
+		TurnKey:        turnKey,
+		Summary:        summary,
 		UpdatedAt:      now,
 	}); err != nil {
 		return nil, err
