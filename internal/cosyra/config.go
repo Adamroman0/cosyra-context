@@ -15,6 +15,11 @@ import (
 	"github.com/adamroman0/cosyra-context/internal/store"
 )
 
+type AdapterInstaller interface {
+	Install(projectRoot string, tools []string) error
+	Uninstall(projectRoot string, tools []string) error
+}
+
 const (
 	DirName        = ".cosyra"
 	ConfigFileName = "config.json"
@@ -47,6 +52,10 @@ func ResolveProjectRoot(project string) (string, error) {
 }
 
 func EnableProject(projectRoot string, tools []string) (*Config, error) {
+	return EnableProjectWithInstaller(projectRoot, tools, nil)
+}
+
+func EnableProjectWithInstaller(projectRoot string, tools []string, installer AdapterInstaller) (*Config, error) {
 	cosyraDir := filepath.Join(projectRoot, DirName)
 	if err := os.MkdirAll(cosyraDir, 0o700); err != nil {
 		return nil, err
@@ -88,6 +97,11 @@ func EnableProject(projectRoot string, tools []string) (*Config, error) {
 			return nil, err
 		}
 	}
+	if installer != nil {
+		if err := installer.Install(projectRoot, cfg.EnabledTools); err != nil {
+			return nil, err
+		}
+	}
 	if _, err := os.Stat(filepath.Join(projectRoot, DirName, ContextFile)); errors.Is(err, os.ErrNotExist) {
 		if err := os.WriteFile(filepath.Join(projectRoot, DirName, ContextFile), []byte("# Cosyra Context\n\nNo context captured yet.\n"), 0o600); err != nil {
 			return nil, err
@@ -97,6 +111,10 @@ func EnableProject(projectRoot string, tools []string) (*Config, error) {
 }
 
 func DisableProject(projectRoot string, purge bool) error {
+	return DisableProjectWithInstaller(projectRoot, purge, nil)
+}
+
+func DisableProjectWithInstaller(projectRoot string, purge bool, installer AdapterInstaller) error {
 	if purge {
 		return os.RemoveAll(filepath.Join(projectRoot, DirName))
 	}
@@ -111,6 +129,11 @@ func DisableProject(projectRoot string, purge bool) error {
 	cfg.UpdatedAt = time.Now().UTC()
 	if err := writeJSONAtomic(configPath(projectRoot), cfg, 0o600); err != nil {
 		return err
+	}
+	if installer != nil {
+		if err := installer.Uninstall(projectRoot, cfg.EnabledTools); err != nil {
+			return err
+		}
 	}
 	db, err := store.Open(context.Background(), filepath.Join(projectRoot, DirName))
 	if err != nil {

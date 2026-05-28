@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/adamroman0/cosyra-context/internal/adapters"
 	"github.com/adamroman0/cosyra-context/internal/cosyra"
 	"github.com/adamroman0/cosyra-context/internal/hooks"
 )
@@ -107,7 +108,7 @@ func runOn(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
-	cfg, err := cosyra.EnableProject(project, selected)
+	cfg, err := cosyra.EnableProjectWithInstaller(project, selected, adapterInstaller{})
 	if err != nil {
 		return err
 	}
@@ -157,7 +158,7 @@ func runOff(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 	}
 
-	if err := cosyra.DisableProject(project, *purge); err != nil {
+	if err := cosyra.DisableProjectWithInstaller(project, *purge, adapterInstaller{}); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "Cosyra disabled for this project.")
@@ -165,6 +166,16 @@ func runOff(args []string, stdin io.Reader, stdout io.Writer) error {
 		fmt.Fprintln(stdout, "Local .cosyra data was left in place.")
 	}
 	return nil
+}
+
+type adapterInstaller struct{}
+
+func (adapterInstaller) Install(projectRoot string, tools []string) error {
+	return adapters.Install(projectRoot, tools)
+}
+
+func (adapterInstaller) Uninstall(projectRoot string, tools []string) error {
+	return adapters.Uninstall(projectRoot, tools)
 }
 
 func runStatus(args []string, stdout io.Writer) error {
