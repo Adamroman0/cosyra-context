@@ -27,6 +27,8 @@ type StopResult struct {
 	TurnKey string
 }
 
+const metadataRetention = 7 * 24 * time.Hour
+
 func HandleStart(projectRoot string, agent string, input io.Reader) (*StartResult, error) {
 	if !cosyra.ValidTool(agent) {
 		return nil, fmt.Errorf("unknown agent %q", agent)
@@ -125,6 +127,9 @@ func HandleStop(projectRoot string, agent string, input io.Reader) (*StopResult,
 		Summary:        summary,
 		UpdatedAt:      now,
 	}); err != nil {
+		return nil, err
+	}
+	if err := db.PruneBefore(context.Background(), now.Add(-metadataRetention)); err != nil {
 		return nil, err
 	}
 	return &StopResult{TurnKey: turnKey}, nil

@@ -289,3 +289,25 @@ func (s *Store) TurnCount(ctx context.Context) (int, error) {
 	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM turns`).Scan(&count)
 	return count, err
 }
+
+func (s *Store) PruneBefore(ctx context.Context, cutoff time.Time) error {
+	cutoffText := cutoff.UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM turns WHERE updated_at < ?`, cutoffText); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM agent_sessions
+		WHERE updated_at < ?
+		  AND status NOT IN ('active', 'busy', 'waiting')
+	`, cutoffText)
+	return err
+}
+
+func DBSize(projectRoot string) (int64, error) {
+	path := filepath.Join(projectRoot, ".cosyra", DBFileName)
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}

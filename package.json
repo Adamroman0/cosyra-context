@@ -1,0 +1,17 @@
+{
+  "name": "cosyra-context",
+  "version": "0.1.0",
+  "description": "Minimal project-local context bridge for AI coding tools",
+  "bin": {
+    "cosyra": "npm/cosyra.js"
+  },
+  "files": [
+    "npm/cosyra.js",
+    "dist/"
+  ],
+  "scripts": {
+    "test": "GOCACHE=$PWD/.gocache go test ./...",
+    "build": "GOCACHE=$PWD/.gocache go build -o dist/cosyra ./cmd/cosyra"
+  },
+  "license": "MIT"
+}

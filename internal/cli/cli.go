@@ -12,6 +12,7 @@ import (
 	"github.com/adamroman0/cosyra-context/internal/adapters"
 	"github.com/adamroman0/cosyra-context/internal/cosyra"
 	"github.com/adamroman0/cosyra-context/internal/hooks"
+	"github.com/adamroman0/cosyra-context/internal/store"
 )
 
 func Run(args []string, version string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
@@ -210,6 +211,9 @@ func runStatus(args []string, stdout io.Writer) error {
 			state = "connected"
 		}
 		fmt.Fprintf(stdout, "  %-13s %s\n", cosyra.ToolDisplayName(tool), state)
+	}
+	if size, err := store.DBSize(project); err == nil {
+		fmt.Fprintf(stdout, "\nStore:\n  .cosyra/cosyra.db (%d bytes)\n  event metadata retention: 7 days\n  context limit: 12288 bytes\n", size)
 	}
 	return nil
 }
