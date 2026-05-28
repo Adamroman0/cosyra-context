@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/adamroman0/cosyra-context/internal/cosyra"
+	"github.com/adamroman0/cosyra-context/internal/hooks"
 )
 
 func Run(args []string, version string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
@@ -29,13 +30,50 @@ func Run(args []string, version string, stdin io.Reader, stdout io.Writer, stder
 	case "status":
 		return runStatus(args[1:], stdout)
 	case "hook":
-		return errors.New("cosyra hook is not implemented yet")
+		return runHook(args[1:], stdin, stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return nil
 	default:
 		printUsage(stderr)
 		return fmt.Errorf("unknown command %q", args[0])
+	}
+}
+
+func runHook(args []string, stdin io.Reader, stdout io.Writer) error {
+	if len(args) == 0 {
+		return errors.New("usage: cosyra hook <start|stop> --agent <agent>")
+	}
+	flags := flag.NewFlagSet("hook "+args[0], flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	agent := flags.String("agent", "", "agent name")
+	projectFlag := flags.String("project", "", "project directory")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *agent == "" {
+		return errors.New("--agent is required")
+	}
+	project, err := cosyra.ResolveProjectRoot(*projectFlag)
+	if err != nil {
+		return err
+	}
+
+	switch args[0] {
+	case "start":
+		result, err := hooks.HandleStart(project, *agent, stdin)
+		if err != nil {
+			return err
+		}
+		if result.Context != "" {
+			fmt.Fprint(stdout, result.Context)
+		}
+		return nil
+	case "stop":
+		_, err := hooks.HandleStop(project, *agent, stdin)
+		return err
+	default:
+		return fmt.Errorf("unknown hook command %q", args[0])
 	}
 }
 

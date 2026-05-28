@@ -24,6 +24,31 @@ type Project struct {
 	UpdatedAt time.Time
 }
 
+type AgentSession struct {
+	ProjectRoot     string
+	CosyraSessionID string
+	Agent           string
+	AgentSessionID  string
+	Status          string
+	StartedAt       time.Time
+	UpdatedAt       time.Time
+	EndedAt         *time.Time
+}
+
+type Turn struct {
+	ProjectRoot    string
+	Agent          string
+	AgentSessionID string
+	TurnKey        string
+	Status         string
+	StartedAt      *time.Time
+	CompletedAt    *time.Time
+	Summary        string
+	MetadataJSON   string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 func Open(ctx context.Context, cosyraDir string) (*Store, error) {
 	if err := os.MkdirAll(cosyraDir, 0o700); err != nil {
 		return nil, err
@@ -169,8 +194,72 @@ func (s *Store) SetAdapter(ctx context.Context, projectRoot string, agent string
 	return err
 }
 
+func (s *Store) UpsertAgentSession(ctx context.Context, session AgentSession) error {
+	endedAt := sql.NullString{}
+	if session.EndedAt != nil {
+		endedAt.Valid = true
+		endedAt.String = session.EndedAt.UTC().Format(time.RFC3339Nano)
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO agent_sessions (
+			project_root, cosyra_session_id, agent, agent_session_id, status,
+			started_at, updated_at, ended_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(project_root, agent, agent_session_id) DO UPDATE SET
+			cosyra_session_id = excluded.cosyra_session_id,
+			status = excluded.status,
+			updated_at = excluded.updated_at,
+			ended_at = excluded.ended_at
+	`, session.ProjectRoot, session.CosyraSessionID, session.Agent, session.AgentSessionID, session.Status,
+		session.StartedAt.UTC().Format(time.RFC3339Nano),
+		session.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		endedAt)
+	return err
+}
+
+func (s *Store) UpsertTurn(ctx context.Context, turn Turn) error {
+	startedAt := sql.NullString{}
+	if turn.StartedAt != nil {
+		startedAt.Valid = true
+		startedAt.String = turn.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
+	completedAt := sql.NullString{}
+	if turn.CompletedAt != nil {
+		completedAt.Valid = true
+		completedAt.String = turn.CompletedAt.UTC().Format(time.RFC3339Nano)
+	}
+	metadata := turn.MetadataJSON
+	if metadata == "" {
+		metadata = "{}"
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO turns (
+			project_root, agent, agent_session_id, turn_key, status,
+			started_at, completed_at, summary, metadata_json, created_at, updated_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(project_root, agent, agent_session_id, turn_key) DO UPDATE SET
+			status = excluded.status,
+			completed_at = excluded.completed_at,
+			summary = excluded.summary,
+			metadata_json = excluded.metadata_json,
+			updated_at = excluded.updated_at
+	`, turn.ProjectRoot, turn.Agent, turn.AgentSessionID, turn.TurnKey, turn.Status,
+		startedAt, completedAt, turn.Summary, metadata,
+		turn.CreatedAt.UTC().Format(time.RFC3339Nano),
+		turn.UpdatedAt.UTC().Format(time.RFC3339Nano))
+	return err
+}
+
 func (s *Store) ProjectCount(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM projects`).Scan(&count)
+	return count, err
+}
+
+func (s *Store) TurnCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM turns`).Scan(&count)
 	return count, err
 }
