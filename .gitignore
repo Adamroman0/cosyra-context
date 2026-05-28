@@ -1,0 +1,6 @@
+.cosyra/
+dist/
+coverage/
+node_modules/
+*.log
+
