@@ -36,6 +36,43 @@ func TestEnableProjectCreatesConfigContextAndGitignore(t *testing.T) {
 	}
 }
 
+type recordingInstaller struct {
+	installed   [][]string
+	uninstalled [][]string
+}
+
+func (r *recordingInstaller) Install(projectRoot string, tools []string) error {
+	r.installed = append(r.installed, tools)
+	return nil
+}
+
+func (r *recordingInstaller) Uninstall(projectRoot string, tools []string) error {
+	r.uninstalled = append(r.uninstalled, tools)
+	return nil
+}
+
+func TestDisableProjectPurgeUninstallsHooks(t *testing.T) {
+	project := t.TempDir()
+	installer := &recordingInstaller{}
+	if _, err := EnableProjectWithInstaller(project, []string{"claude", "codex"}, installer); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := DisableProjectWithInstaller(project, true, installer); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(installer.uninstalled) != 1 {
+		t.Fatalf("expected exactly one uninstall call on purge, got %d", len(installer.uninstalled))
+	}
+	if got := installer.uninstalled[0]; len(got) != 2 {
+		t.Fatalf("expected both tools uninstalled, got %v", got)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".cosyra")); !os.IsNotExist(err) {
+		t.Fatalf("expected .cosyra removed on purge, stat err = %v", err)
+	}
+}
+
 func TestDisableProjectKeepsDataByDefault(t *testing.T) {
 	project := t.TempDir()
 	if _, err := EnableProject(project, []string{"claude"}); err != nil {

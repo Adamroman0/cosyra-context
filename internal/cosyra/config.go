@@ -115,25 +115,34 @@ func DisableProject(projectRoot string, purge bool) error {
 }
 
 func DisableProjectWithInstaller(projectRoot string, purge bool, installer AdapterInstaller) error {
-	if purge {
-		return os.RemoveAll(filepath.Join(projectRoot, DirName))
-	}
 	cfg, err := LoadConfig(projectRoot)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			// Nothing is configured. If purging, still clear any leftover dir.
+			if purge {
+				return os.RemoveAll(filepath.Join(projectRoot, DirName))
+			}
 			return nil
 		}
 		return err
 	}
-	cfg.Enabled = false
-	cfg.UpdatedAt = time.Now().UTC()
-	if err := writeJSONAtomic(configPath(projectRoot), cfg, 0o600); err != nil {
-		return err
-	}
+
+	// Always uninstall adapters first so no dangling hooks are left behind,
+	// even when purging local state.
 	if installer != nil {
 		if err := installer.Uninstall(projectRoot, cfg.EnabledTools); err != nil {
 			return err
 		}
+	}
+
+	if purge {
+		return os.RemoveAll(filepath.Join(projectRoot, DirName))
+	}
+
+	cfg.Enabled = false
+	cfg.UpdatedAt = time.Now().UTC()
+	if err := writeJSONAtomic(configPath(projectRoot), cfg, 0o600); err != nil {
+		return err
 	}
 	db, err := store.Open(context.Background(), filepath.Join(projectRoot, DirName))
 	if err != nil {
